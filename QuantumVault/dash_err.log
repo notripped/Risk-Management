@@ -1,0 +1,19 @@
+2026-03-12 23:59:55.221 No ASGI app assignments found in D:\Risk Management\QuantumVault\dashboard.py
+2026-03-12 23:59:56.016 Filtered 411 packages down to 1 candidates for component scanning
+2026-03-12 23:59:56.016 Scanning 1 candidate packages for component manifests using 1 worker threads
+2026-03-12 23:59:56.059 Found 0 component manifests total
+2026-03-12 23:59:56.060 No asset roots to watch
+2026-03-12 23:59:56.060 File watching not started
+2026-03-12 23:59:56.060 Starting new event loop for server
+2026-03-12 23:59:56.061 Starting server...
+2026-03-12 23:59:56.061 Serving static content from C:\Users\goura\AppData\Roaming\Python\Python313\site-packages\streamlit\static
+2026-03-12 23:59:56.065 Server started on port 8086
+2026-03-12 23:59:56.066 Runtime state: RuntimeState.INITIAL -> RuntimeState.NO_SESSIONS_CONNECTED
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8086
+  Network URL: http://10.188.240.34:8086
+  External URL: http://223.187.67.79:8086
+
+2026-03-12 23:59:56.455 Setting up signal handler
