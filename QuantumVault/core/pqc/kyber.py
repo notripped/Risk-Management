@@ -20,6 +20,7 @@ Note: This is a behaviorally accurate simulation for R&D/benchmarking.
       For production use, use liboqs or the official reference implementation.
 """
 
+import hmac
 import numpy as np
 import hashlib
 import os
@@ -234,6 +235,3 @@ class KyberSimulator:
             },
             "recommendation": f"Use {params.name} as drop-in replacement for RSA-2048 key exchange"
         }
-
-
-import hmac

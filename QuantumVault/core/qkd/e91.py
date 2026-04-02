@@ -18,6 +18,7 @@ Any violation > 2 confirms quantum entanglement.
 Violation = 2√2 means perfect EPR source and no eavesdropping.
 """
 
+import hashlib
 import numpy as np
 from dataclasses import dataclass, field
 from typing import Optional
@@ -238,6 +239,3 @@ class E91Simulator:
 
         key_bytes = np.packbits(raw_key).tobytes()
         return hashlib.shake_256(key_bytes).digest(n_output_bytes) if len(key_bytes) > 0 else b""
-
-
-import hashlib
