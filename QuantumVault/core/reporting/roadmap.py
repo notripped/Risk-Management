@@ -366,7 +366,10 @@ class RoadmapGenerator:
             year_investment = sum(
                 p.capital_cost_usd for p in phases
                 if (p.phase_number - 1) // 2 + 1 == year
-            ) + sum(p.opex_usd_per_year for p in phases)
+            ) + sum(
+                p.opex_usd_per_year for p in phases
+                if (p.phase_number - 1) // 2 + 1 <= year
+            )
 
             cumulative_investment += year_investment
 
