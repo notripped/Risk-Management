@@ -161,7 +161,7 @@ class MigrationEngine:
         risk_score = self._compute_risk_score(asset, vuln)
 
         # HNDL risk: if data retained beyond Q-Day, already compromised retroactively
-        hndl_risk = max(0.0, asset.retention_years - qday_years + 2)
+        hndl_risk = max(0.0, asset.retention_years - qday_years)
 
         # Migration urgency
         urgency = self._determine_urgency(asset, vuln, risk_score)
