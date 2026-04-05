@@ -128,20 +128,19 @@ class QKDKeyManagementSystem:
 
             if result.n_secure_key_bits >= key_size_bits and not result.eve_detected:
                 key_bytes = result.final_key[:key_size_bits // 8]
-                if len(key_bytes) >= key_size_bits // 8:
-                    key_id = self._generate_key_id()
-                    self._store[key_id] = QKDKey(
-                        key_id=key_id,
-                        key_material=key_bytes[:key_size_bits // 8],
-                        key_size_bits=key_size_bits,
-                        state=KeyState.FRESH,
-                        source_protocol="bb84",
-                        source_link=link_id,
-                        created_at=time.time(),
-                        ttl_seconds=ttl_seconds,
-                        qber_at_generation=result.qber,
-                    )
-                    n_ingested += 1
+                key_id = self._generate_key_id()
+                self._store[key_id] = QKDKey(
+                    key_id=key_id,
+                    key_material=key_bytes,
+                    key_size_bits=key_size_bits,
+                    state=KeyState.FRESH,
+                    source_protocol="bb84",
+                    source_link=link_id,
+                    created_at=time.time(),
+                    ttl_seconds=ttl_seconds,
+                    qber_at_generation=result.qber,
+                )
+                n_ingested += 1
 
         return n_ingested
 
