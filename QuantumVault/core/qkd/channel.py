@@ -157,6 +157,10 @@ class QKDChannelAnalyzer:
                 return 0.0
             return -p * np.log2(p) - (1 - p) * np.log2(1 - p)
 
+        # Clamp to a minimum noise floor — real detectors always have dark counts
+        # and alignment errors, so QBER=0 is physically unreachable
+        qber = max(qber, 1e-3)
+
         if qber >= 0.11:
             secret_fraction = 0.0
         else:

@@ -324,5 +324,5 @@ class MigrationEngine:
         else:
             steps.append(f"3. Migrate: Replace with {repl.get('sig', 'Dilithium3')}")
             steps.append(f"4. Validate: Run end-to-end tests on all protocol flows")
-        steps.append(f"5. Document: Update crypto policy and compliance records")
+        steps.append(f"{len(steps) + 1}. Document: Update crypto policy and compliance records")
         return steps
