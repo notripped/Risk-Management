@@ -357,6 +357,13 @@ class RoadmapGenerator:
         annual_prob_breach = 0.02     # 2% annual probability of breach (industry estimate)
         expected_annual_breach_cost = breach_cost * annual_prob_breach
 
+        # Pre-compute sequential phase completion months (phases run back-to-back)
+        cumulative_months = 0
+        phase_end_months = []
+        for p in phases:
+            cumulative_months += p.duration_months
+            phase_end_months.append(cumulative_months)
+
         projections = []
         cumulative_investment = 0
         risk_reduction = 0
@@ -373,9 +380,10 @@ class RoadmapGenerator:
 
             cumulative_investment += year_investment
 
-            # Risk reduction accumulates as phases complete
-            phases_done = min(year * 1.5, len(phases))
-            risk_reduction = sum(p.risk_reduction for p in phases[:int(phases_done)])
+            # Risk reduction accumulates based on actual phase completion months
+            months_elapsed = year * 12
+            phases_done = sum(1 for end in phase_end_months if end <= months_elapsed)
+            risk_reduction = sum(p.risk_reduction for p in phases[:phases_done])
             risk_reduction = min(risk_reduction, 95.0)
 
             avoided_breach = int(expected_annual_breach_cost * (risk_reduction / 100))
