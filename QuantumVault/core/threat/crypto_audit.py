@@ -85,9 +85,9 @@ class InstitutionCryptoAudit:
 # Cipher suite database — IANA names + quantum ratings
 CIPHER_SUITE_DB = {
     # TLS 1.3 suites — safe against classical, AES-256 partially safe against quantum
-    "TLS_AES_256_GCM_SHA384":               CipherSuiteProfile("TLS_AES_256_GCM_SHA384", "TLS 1.3 KE", "TLS 1.3", "AES-256-GCM", "SHA384", ["1.3"], CipherSuiteRating.HYBRID_READY, 256, 128, "Current — upgrade KEM to Kyber"),
-    "TLS_AES_128_GCM_SHA256":               CipherSuiteProfile("TLS_AES_128_GCM_SHA256", "TLS 1.3 KE", "TLS 1.3", "AES-128-GCM", "SHA256", ["1.3"], CipherSuiteRating.HYBRID_READY, 128, 64, "Current — upgrade KEM and to AES-256"),
-    "TLS_CHACHA20_POLY1305_SHA256":         CipherSuiteProfile("TLS_CHACHA20_POLY1305_SHA256", "TLS 1.3 KE", "TLS 1.3", "CHACHA20", "SHA256", ["1.3"], CipherSuiteRating.HYBRID_READY, 256, 128, "Current — add Kyber KEM"),
+    "TLS_AES_256_GCM_SHA384":               CipherSuiteProfile("TLS_AES_256_GCM_SHA384", "ECDHE", "RSA/ECDSA", "AES-256-GCM", "SHA384", ["1.3"], CipherSuiteRating.HYBRID_READY, 256, 128, "Current — upgrade KEM to Kyber"),
+    "TLS_AES_128_GCM_SHA256":               CipherSuiteProfile("TLS_AES_128_GCM_SHA256", "ECDHE", "RSA/ECDSA", "AES-128-GCM", "SHA256", ["1.3"], CipherSuiteRating.HYBRID_READY, 128, 64, "Current — upgrade KEM and to AES-256"),
+    "TLS_CHACHA20_POLY1305_SHA256":         CipherSuiteProfile("TLS_CHACHA20_POLY1305_SHA256", "ECDHE", "RSA/ECDSA", "CHACHA20", "SHA256", ["1.3"], CipherSuiteRating.HYBRID_READY, 256, 128, "Current — add Kyber KEM"),
     # TLS 1.2 with ECDHE — quantum vulnerable KE
     "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384": CipherSuiteProfile("TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384", "ECDHE", "RSA", "AES-256-GCM", "SHA384", ["1.2", "1.3"], CipherSuiteRating.CLASSICAL_WEAK, 256, 0, "ECDHE broken by Grover+Shor"),
     "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256": CipherSuiteProfile("TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256", "ECDHE", "RSA", "AES-128-GCM", "SHA256", ["1.2"], CipherSuiteRating.CLASSICAL_WEAK, 128, 0, "Weak — ECDHE quantum-broken"),
