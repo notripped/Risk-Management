@@ -21,6 +21,7 @@ from enum import Enum
 
 from .kyber     import KyberVariant, KYBER_PARAMS
 from .dilithium import DilithiumVariant, FALCONVariant, DILITHIUM_PARAMS, FALCON_PARAMS
+from .sphincs   import SPHINCSVariant, SPHINCS_PARAMS
 
 
 class ClassicalAlgorithm(Enum):
@@ -82,6 +83,7 @@ class MigrationAssessment:
     hndl_risk_years: float          # Years until data becomes decryptable
     recommended_kem: str
     recommended_sig: str
+    conservative_sig: str           # SPHINCS+ hash-based alternative (FIPS 205)
     hybrid_mode_needed: bool
     estimated_migration_effort: str # "days", "weeks", "months"
     compatibility_notes: list
@@ -121,22 +123,22 @@ ALGORITHM_VULNERABILITY = {
     ClassicalAlgorithm.SHA384:      {"quantum_broken": False, "classical_broken": False, "qday_years": 99, "security_bits_classical": 192, "security_bits_quantum": 96},
 }
 
-# Recommended replacement mapping
 RECOMMENDED_REPLACEMENTS = {
-    ClassicalAlgorithm.RSA_2048:   {"kem": "Kyber-768",    "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+ECDSA-P256"},
-    ClassicalAlgorithm.RSA_4096:   {"kem": "Kyber-1024",   "sig": "Dilithium5",  "hybrid_sig": "Dilithium5+ECDSA-P384"},
-    ClassicalAlgorithm.ECDH_P256:  {"kem": "Kyber-768",    "sig": "FALCON-512",  "hybrid_sig": "FALCON-512+ECDSA-P256"},
-    ClassicalAlgorithm.ECDH_P384:  {"kem": "Kyber-1024",   "sig": "FALCON-1024", "hybrid_sig": "FALCON-1024+ECDSA-P384"},
-    ClassicalAlgorithm.ECDSA_P256: {"kem": "Kyber-768",    "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+ECDSA-P256"},
-    ClassicalAlgorithm.ECDSA_P384: {"kem": "Kyber-1024",   "sig": "Dilithium5",  "hybrid_sig": "Dilithium5+ECDSA-P384"},
-    ClassicalAlgorithm.DH_2048:    {"kem": "Kyber-768",    "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+RSA-2048"},
-    ClassicalAlgorithm.AES_128_GCM:{"kem": "AES-256-GCM",  "sig": "N/A — symmetric", "hybrid_sig": "N/A"},
-    ClassicalAlgorithm.AES_256_GCM:{"kem": "AES-256-GCM",  "sig": "N/A — already quantum-safe at L1", "hybrid_sig": "N/A"},
-    ClassicalAlgorithm.SHA256:     {"kem": "SHA3-256",      "sig": "N/A", "hybrid_sig": "N/A"},
-    ClassicalAlgorithm.RSA_1024:   {"kem": "Kyber-768",    "sig": "Dilithium3",  "hybrid_sig": "Dilithium3"},
-    ClassicalAlgorithm.RSA_3072:   {"kem": "Kyber-768",    "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+RSA-3072"},
-    ClassicalAlgorithm.SHA384:     {"kem": "SHA3-384",      "sig": "N/A", "hybrid_sig": "N/A"},
+    ClassicalAlgorithm.RSA_2048:   {"kem": "Kyber-768",   "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+ECDSA-P256",  "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.RSA_4096:   {"kem": "Kyber-1024",  "sig": "Dilithium5",  "hybrid_sig": "Dilithium5+ECDSA-P384",  "conservative_sig": "SPHINCS+-256f"},
+    ClassicalAlgorithm.ECDH_P256:  {"kem": "Kyber-768",   "sig": "FALCON-512",  "hybrid_sig": "FALCON-512+ECDSA-P256",  "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.ECDH_P384:  {"kem": "Kyber-1024",  "sig": "FALCON-1024", "hybrid_sig": "FALCON-1024+ECDSA-P384", "conservative_sig": "SPHINCS+-256f"},
+    ClassicalAlgorithm.ECDSA_P256: {"kem": "Kyber-768",   "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+ECDSA-P256",  "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.ECDSA_P384: {"kem": "Kyber-1024",  "sig": "Dilithium5",  "hybrid_sig": "Dilithium5+ECDSA-P384",  "conservative_sig": "SPHINCS+-256f"},
+    ClassicalAlgorithm.DH_2048:    {"kem": "Kyber-768",   "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+RSA-2048",    "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.AES_128_GCM:{"kem": "AES-256-GCM", "sig": "N/A — symmetric",                   "hybrid_sig": "N/A", "conservative_sig": "N/A"},
+    ClassicalAlgorithm.AES_256_GCM:{"kem": "AES-256-GCM", "sig": "N/A — already quantum-safe at L1",  "hybrid_sig": "N/A", "conservative_sig": "N/A"},
+    ClassicalAlgorithm.SHA256:     {"kem": "SHA3-256",     "sig": "N/A",                               "hybrid_sig": "N/A", "conservative_sig": "N/A"},
+    ClassicalAlgorithm.RSA_1024:   {"kem": "Kyber-768",   "sig": "Dilithium3",  "hybrid_sig": "Dilithium3",             "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.RSA_3072:   {"kem": "Kyber-768",   "sig": "Dilithium3",  "hybrid_sig": "Dilithium3+RSA-3072",    "conservative_sig": "SPHINCS+-128f"},
+    ClassicalAlgorithm.SHA384:     {"kem": "SHA3-384",     "sig": "N/A",                               "hybrid_sig": "N/A", "conservative_sig": "N/A"},
 }
+
 
 
 class MigrationEngine:
@@ -188,6 +190,7 @@ class MigrationEngine:
             hndl_risk_years=round(hndl_risk, 1),
             recommended_kem=repl.get("kem", "Kyber-768"),
             recommended_sig=repl.get("sig", "Dilithium3"),
+            conservative_sig=repl.get("conservative_sig", "SPHINCS+-128f"),
             hybrid_mode_needed=hybrid_needed,
             estimated_migration_effort=effort,
             compatibility_notes=self._compatibility_notes(asset),
@@ -324,5 +327,11 @@ class MigrationEngine:
         else:
             steps.append(f"3. Migrate: Replace with {repl.get('sig', 'Dilithium3')}")
             steps.append(f"4. Validate: Run end-to-end tests on all protocol flows")
+        conservative = repl.get("conservative_sig", "")
+        if conservative and conservative != "N/A":
+            steps.append(
+                f"{len(steps) + 1}. Alternative: Use {conservative} (FIPS 205 SLH-DSA) "
+                f"for archive/code-signing when hash-only security assurance is required"
+            )
         steps.append(f"{len(steps) + 1}. Document: Update crypto policy and compliance records")
         return steps

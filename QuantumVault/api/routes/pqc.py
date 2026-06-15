@@ -3,11 +3,12 @@
 from fastapi import APIRouter, HTTPException
 from api.models.schemas import (
     KyberBenchmarkRequest, DilithiumBenchmarkRequest,
-    MigrationPlanRequest,
+    SPHINCSBenchmarkRequest, MigrationPlanRequest,
 )
 from core.pqc import (
     KyberSimulator, KyberVariant,
     DilithiumSimulator, FALCONSimulator, DilithiumVariant, FALCONVariant,
+    SPHINCSSimulator, SPHINCSVariant,
     MigrationEngine, CryptoAsset, ClassicalAlgorithm, FinancialProtocol,
 )
 
@@ -88,6 +89,26 @@ def falcon_comparison():
         return sim.signature_size_comparison()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/sphincs/benchmark", summary="SPHINCS+ / SLH-DSA vs ECDSA P-256 (NIST FIPS 205)")
+def sphincs_benchmark(req: SPHINCSBenchmarkRequest):
+    """
+    Benchmark SPHINCS+ (SLH-DSA, NIST FIPS 205) against ECDSA P-256.
+    Returns key sizes, signature sizes, performance, and use-case guidance.
+    Variants: sphincs_128f (NIST Level 1) | sphincs_192f (NIST Level 3) | sphincs_256f (NIST Level 5).
+    """
+    try:
+        variant_map = {
+            "sphincs_128f": SPHINCSVariant.SPHINCS_128F,
+            "sphincs_192f": SPHINCSVariant.SPHINCS_192F,
+            "sphincs_256f": SPHINCSVariant.SPHINCS_256F,
+        }
+        variant = variant_map.get(req.variant, SPHINCSVariant.SPHINCS_128F)
+        sim = SPHINCSSimulator()
+        return sim.benchmark_vs_ecdsa(variant)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.post("/migration/plan", summary="Generate PQC Migration Plan")
@@ -141,6 +162,7 @@ def migration_plan(req: MigrationPlanRequest):
                     "hndl_risk_years": a.hndl_risk_years,
                     "recommended_kem": a.recommended_kem,
                     "recommended_sig": a.recommended_sig,
+                    "conservative_sig": a.conservative_sig,
                     "hybrid_mode_needed": a.hybrid_mode_needed,
                     "effort": a.estimated_migration_effort,
                     "compliance_flags": a.compliance_flags,
@@ -163,11 +185,13 @@ def algorithm_support_matrix():
             {"name": "Kyber-1024", "nist_level": 5, "standard": "FIPS 203", "tls13": True, "swift": False, "fix": False, "status": "Standardized 2024"},
         ],
         "signature_algorithms": [
-            {"name": "Dilithium2",   "nist_level": 2, "standard": "FIPS 204", "tls13": True, "code_signing": True, "status": "Standardized 2024"},
-            {"name": "Dilithium3",   "nist_level": 3, "standard": "FIPS 204", "tls13": True, "code_signing": True, "status": "Recommended"},
-            {"name": "FALCON-512",   "nist_level": 1, "standard": "FIPS 206", "tls13": True, "code_signing": True, "status": "Smallest signatures"},
-            {"name": "FALCON-1024",  "nist_level": 5, "standard": "FIPS 206", "tls13": True, "code_signing": True, "status": "Standardized 2024"},
-            {"name": "SPHINCS+-128f","nist_level": 1, "standard": "FIPS 205", "tls13": True, "code_signing": True, "status": "Hash-based — most conservative"},
+            {"name": "Dilithium2",    "nist_level": 2, "standard": "FIPS 204", "tls13": True, "code_signing": True, "status": "Standardized 2024"},
+            {"name": "Dilithium3",    "nist_level": 3, "standard": "FIPS 204", "tls13": True, "code_signing": True, "status": "Recommended"},
+            {"name": "FALCON-512",    "nist_level": 1, "standard": "FIPS 206", "tls13": True, "code_signing": True, "status": "Smallest signatures"},
+            {"name": "FALCON-1024",   "nist_level": 5, "standard": "FIPS 206", "tls13": True, "code_signing": True, "status": "Standardized 2024"},
+            {"name": "SPHINCS+-128f", "nist_level": 1, "standard": "FIPS 205", "tls13": True, "code_signing": True, "status": "Hash-based — most conservative"},
+            {"name": "SPHINCS+-192f", "nist_level": 3, "standard": "FIPS 205", "tls13": True, "code_signing": True, "status": "Hash-based — Level 3 balanced"},
+            {"name": "SPHINCS+-256f", "nist_level": 5, "standard": "FIPS 205", "tls13": True, "code_signing": True, "status": "Hash-based — Level 5 maximum security"},
         ],
         "hybrid_schemes": [
             {"name": "X25519Kyber768", "description": "Hybrid classical+PQC for TLS 1.3 transition", "tlsrfc": "draft-ietf-tls-hybrid-design"},

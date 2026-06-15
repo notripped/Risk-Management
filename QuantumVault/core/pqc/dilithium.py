@@ -242,6 +242,8 @@ class FALCONSimulator:
 
     def signature_size_comparison(self) -> list:
         """Compare signature sizes across all PQC and classical schemes"""
+        from .sphincs import SPHINCS_PARAMS, SPHINCSVariant  # lazy — avoids circular import
+
         schemes = [
             {"name": "ECDSA P-256", "sig_bytes": 64,   "quantum_safe": False, "nist_level": "N/A"},
             {"name": "RSA-2048",    "sig_bytes": 256,   "quantum_safe": False, "nist_level": "N/A"},
@@ -250,7 +252,14 @@ class FALCONSimulator:
             {"name": "Dilithium2",  "sig_bytes": 2420,  "quantum_safe": True,  "nist_level": 2},
             {"name": "Dilithium3",  "sig_bytes": 3293,  "quantum_safe": True,  "nist_level": 3},
             {"name": "Dilithium5",  "sig_bytes": 4595,  "quantum_safe": True,  "nist_level": 5},
-            {"name": "SPHINCS+-128f","sig_bytes": 17088, "quantum_safe": True, "nist_level": 1},
-            {"name": "SPHINCS+-256f","sig_bytes": 49856, "quantum_safe": True, "nist_level": 5},
         ]
+        for v in (SPHINCSVariant.SPHINCS_128F, SPHINCSVariant.SPHINCS_192F,SPHINCSVariant.SPHINCS_256F):
+            p = SPHINCS_PARAMS[v]
+            schemes.append({
+                "name": p.name,
+                "sig_bytes": p.signature_bytes,
+                "quantum_safe": True,
+                "nist_level": p.nist_level,
+            })
         return sorted(schemes, key=lambda x: x["sig_bytes"])
+

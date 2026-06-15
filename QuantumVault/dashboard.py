@@ -34,6 +34,7 @@ from core.qkd import (
 from core.pqc import (
     KyberSimulator, KyberVariant, KYBER_PARAMS,
     DilithiumSimulator, FALCONSimulator, DilithiumVariant, FALCONVariant,
+    SPHINCSSimulator, SPHINCSVariant, SPHINCS_PARAMS,
     MigrationEngine, CryptoAsset, ClassicalAlgorithm, FinancialProtocol,
 )
 from core.threat import (
@@ -546,7 +547,7 @@ with tab_qday:
 with tab_pqc:
     st.header("Post-Quantum Cryptography — NIST Standards")
 
-    pqc_sub = st.tabs(["Kyber KEM", "Dilithium Signatures", "Algorithm Comparison", "Migration Planner"])
+    pqc_sub = st.tabs(["Kyber KEM", "Dilithium Signatures", "SPHINCS+ SLH-DSA","Algorithm Comparison", "Migration Planner"])
 
     with pqc_sub[0]:
         st.subheader("CRYSTALS-Kyber Key Encapsulation Mechanism (NIST FIPS 203)")
@@ -595,6 +596,87 @@ with tab_pqc:
             st.metric("TLS Handshake Overhead", f"+{bench['tls_handshake_overhead_bytes']} bytes")
 
     with pqc_sub[2]:
+        st.subheader("SPHINCS+ / SLH-DSA Hash-Based Signatures (NIST FIPS 205)")
+        st.caption(
+            "Security relies solely on SHA-2/SHA-3 hash functions — no lattice assumptions. "
+            "Most conservative PQC choice for root CAs, regulatory archives, and code signing."
+        )
+
+        variant_s = st.selectbox(
+            "SPHINCS+ Variant",
+            ["sphincs_128f", "sphincs_192f", "sphincs_256f"],
+            format_func=lambda v: {
+                "sphincs_128f": "SPHINCS+-128f  (NIST Level 1 — fast, 128-bit quantum)",
+                "sphincs_192f": "SPHINCS+-192f  (NIST Level 3 — balanced, 192-bit quantum)",
+                "sphincs_256f": "SPHINCS+-256f  (NIST Level 5 — maximum security, 256-bit quantum)",
+            }[v],
+        )
+
+
+        if st.button("Benchmark SPHINCS+ vs ECDSA"):
+            variant_map = {
+                "sphincs_128f": SPHINCSVariant.SPHINCS_128F,
+                "sphincs_192f": SPHINCSVariant.SPHINCS_192F,
+                "sphincs_256f": SPHINCSVariant.SPHINCS_256F,
+            }
+
+            sim   = SPHINCSSimulator()
+            bench = sim.benchmark_vs_ecdsa(variant_map[variant_s])
+            sp    = bench["sphincs"]
+            ec    = bench["ecdsa_p256"]
+            oh    = bench["overhead"]
+
+            col_s, col_e = st.columns(2)
+            with col_s:
+                st.markdown(f"### {sp['name']} (Quantum Safe)")
+                st.metric("Standard", sp["standard"])
+                st.metric("NIST Level", sp["nist_level"])
+                st.metric("Public Key", f"{sp['public_key_bytes']} bytes")
+                st.metric("Secret Key", f"{sp['secret_key_bytes']} bytes")
+                st.metric("Signature",  f"{sp['signature_bytes']:,} bytes")
+                st.metric("KeyGen Time", f"{sp['keygen_time_ms']:.2f} ms")
+                st.metric("Sign Time",   f"{sp['sign_time_ms']:.2f} ms")
+                st.metric("Verify Time", f"{sp['verify_time_ms']:.2f} ms")
+                st.metric("Quantum Security", f"{sp['quantum_security_bits']} bits")
+            with col_e:
+                st.markdown("### ECDSA P-256 (NOT Quantum Safe)")
+                st.metric("Public Key", f"{ec['public_key_bytes']} bytes")
+                st.metric("Signature",  f"{ec['signature_bytes']} bytes")
+                st.metric("Sign Time",  f"{ec['sign_time_ms']:.3f} ms")
+                st.metric("Verify Time", f"{ec['verify_time_ms']:.3f} ms")
+                st.metric("Quantum Security", "0 bits (Broken by Shor)")
+
+            st.metric("TLS Handshake Overhead", f"+{bench['tls_handshake_overhead_bytes']:,} bytes")
+            st.metric("Signature Size Ratio vs ECDSA", f"{oh['sig_size_ratio']}×")
+
+            st.warning(
+                f"**Large signature caveat:** {sp['name']} signatures are {sp['signature_bytes']:,} bytes "
+                f"({oh['sig_size_ratio']}× ECDSA). Not suitable for high-frequency transaction signing. "
+                f"Use FALCON-512 or Dilithium3 for that."
+            )
+            st.info(bench["use_case"])
+            st.success(bench["recommendation"])
+
+        st.divider()
+        st.markdown("#### Both Variants — Parameter Reference")
+        param_rows = []
+        for v in (SPHINCSVariant.SPHINCS_128F, SPHINCSVariant.SPHINCS_256F):
+            p = SPHINCS_PARAMS[v]
+            param_rows.append({
+                "Variant":           p.name,
+                "NIST Level":        p.nist_level,
+                "Classical Security": f"{p.classical_security} bits",
+                "Quantum Security":   f"{p.quantum_security} bits",
+                "Public Key (B)":    p.public_key_bytes,
+                "Secret Key (B)":    p.secret_key_bytes,
+                "Signature (B)":     p.signature_bytes,
+                "Sign (ms)":         p.sign_time_ms,
+                "Verify (ms)":       p.verify_time_ms,
+            })
+        st.dataframe(pd.DataFrame(param_rows), hide_index=True, use_container_width=True)
+        
+
+    with pqc_sub[3]:
         st.subheader("Signature Size Comparison — All Algorithms")
         if st.button("Compare Signature Sizes"):
             sim = FALCONSimulator()
@@ -608,7 +690,7 @@ with tab_pqc:
             fig.update_layout(plot_bgcolor="#0a1628", paper_bgcolor="#0a1628", font=dict(color="white"))
             st.plotly_chart(fig, width="stretch")
 
-    with pqc_sub[3]:
+    with pqc_sub[4]:
         st.subheader("PQC Migration Planner")
         inst_name = st.text_input("Institution Name", value="Acme Capital Management")
         if st.button("Run Sample Migration Assessment"):
@@ -630,6 +712,8 @@ with tab_pqc:
                         st.write(f"**Current Algorithm:** {a.asset.algorithm.value}")
                         st.write(f"**Recommended KEM:** {a.recommended_kem}")
                         st.write(f"**Recommended Sig:** {a.recommended_sig}")
+                        if a.conservative_sig and a.conservative_sig != "N/A":
+                            st.write(f"**Conservative Alt (FIPS 205):** {a.conservative_sig}")
                         st.write(f"**Migration Effort:** {a.estimated_migration_effort}")
                     with col_b:
                         for flag in a.compliance_flags:
@@ -639,6 +723,9 @@ with tab_pqc:
                                 st.warning(flag)
                             else:
                                 st.success(flag)
+                    with st.expander("Migration Steps"):
+                        for step in a.migration_steps:
+                            st.write(step)
 
 
 # ================================================================== #

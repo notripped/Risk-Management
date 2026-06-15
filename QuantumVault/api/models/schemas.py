@@ -84,6 +84,10 @@ class KyberBenchmarkRequest(BaseModel):
 class DilithiumBenchmarkRequest(BaseModel):
     variant: str = Field(default="dilithium3")
 
+class SPHINCSBenchmarkRequest(BaseModel):
+    variant: str = Field(default="sphincs_128f", description="sphincs_128f|sphincs_192f|sphincs_256f")
+
+
 class CryptoAssetInput(BaseModel):
     asset_id: str
     name: str
