@@ -31,6 +31,7 @@ class BB84Response(BaseModel):
     attack_type: str
     error_correction_bits_leaked: int
     privacy_amplification_compression: float
+    finite_key_correction_bits: int
     simulation_stats: dict
 
 
@@ -72,6 +73,40 @@ class DistanceSweepRequest(BaseModel):
 
 class AttackSweepRequest(BaseModel):
     intercept_fractions: List[float] = Field(default=[0.0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 1.0])
+
+class DecoyStateRequest(BaseModel):
+    n_pulses: int = Field(default=50000, ge=5000, le=1000000, description="Total pulses sent across all intensities")
+    distance_km: float = Field(default=10.0, ge=0.1, le=500.0)
+    detector_efficiency: float = Field(default=0.85, ge=0.1, le=1.0)
+    dark_count_rate: float = Field(default=100.0, ge=0.0)
+    mu_signal: float = Field(default=0.5, ge=0.1, le=1.0, description="Signal mean photon number µ")
+    mu_decoy: float = Field(default=0.1, ge=0.01, le=0.49, description="Decoy mean photon number ν (must be < mu_signal)")
+    fraction_signal: float = Field(default=0.5, ge=0.1, le=0.8)
+    fraction_decoy: float = Field(default=0.25, ge=0.05, le=0.5)
+    pns_attack: bool = Field(default=False, description="Simulate PNS attack to demonstrate decoy-state detection")
+
+class DecoyStateResponse(BaseModel):
+    n_pulses_total: int
+    n_signal_pulses: int
+    n_decoy_pulses: int
+    n_vacuum_pulses: int
+    gain_signal: float
+    gain_decoy: float
+    gain_vacuum: float
+    qber_signal: float
+    qber_decoy: float
+    Q1_lower_bound: float
+    e1_upper_bound: float
+    single_photon_fraction: float
+    n_secure_key_bits: int
+    secure_key_rate_gllp: float
+    secure_key_rate_standard: float
+    key_rate_improvement_x: float
+    pns_attack_active: bool
+    pns_detectable_via_decoy: bool
+    pns_inconsistency: float
+    finite_key_correction_bits: int
+    simulation_stats: dict
 
 
 # ------------------------------------------------------------------ #

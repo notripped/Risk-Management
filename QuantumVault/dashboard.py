@@ -27,10 +27,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from core.qkd import (
     BB84Simulator, QuantumChannel, AttackType,
+    DecoyStateConfig,
     E91Simulator,
     MDIQKDSimulator,
     QKDChannelAnalyzer, ChannelMedium, HARDWARE_PROFILES,
 )
+
 from core.pqc import (
     KyberSimulator, KyberVariant, KYBER_PARAMS,
     DilithiumSimulator, FALCONSimulator, DilithiumVariant, FALCONVariant,
@@ -184,18 +186,24 @@ with tab_bb84:
 
             # Protocol flow visualization
             st.subheader("Protocol Statistics")
+            _asymptotic_bits = result.n_secure_key_bits + result.finite_key_correction_bits
             stats_df = pd.DataFrame([
                 {"Stage": "Qubits Sent", "Count": result.n_qubits_sent},
                 {"Stage": "Photons Received", "Count": int(result.n_qubits_sent * (1 - result.simulation_stats.get("photon_loss_rate", 0)))},
                 {"Stage": "After Sifting", "Count": result.n_sifted_bits},
                 {"Stage": "After QBER Sampling", "Count": max(0, result.n_sifted_bits - int(result.n_sifted_bits * 0.25))},
                 {"Stage": "After Error Correction", "Count": max(0, result.n_sifted_bits - result.error_correction_bits_leaked)},
-                {"Stage": "Final Secure Key", "Count": result.n_secure_key_bits},
+                {"Stage": "PA — Asymptotic Bound", "Count": _asymptotic_bits},
+                {"Stage": "Final Secure Key (finite-key)", "Count": result.n_secure_key_bits},
             ])
             fig = px.funnel(stats_df, x="Count", y="Stage",
                            title="BB84 Key Distillation Pipeline",
                            color_discrete_sequence=["#0f62ac"])
             st.plotly_chart(fig, width="stretch")
+            st.caption(
+                f"Finite-key overhead: −{result.finite_key_correction_bits:,} bits "
+                f"(Scarani-Renner 2008: Δ = 7√(n·log₂(2/ε)), ε=10⁻¹⁰)"
+            )
 
     # Distance sweep section
     st.subheader("Key Rate vs Distance Analysis")
@@ -223,6 +231,152 @@ with tab_bb84:
             font=dict(color="white"),
         )
         st.plotly_chart(fig, width="stretch")
+
+    # ------------------------------------------------------------------ #
+    #  Decoy-State Protocol Section                                        #
+    # ------------------------------------------------------------------ #
+    st.markdown("---")
+    st.subheader("Decoy-State Protocol (GLLP Security — PNS Attack Defence)")
+    st.markdown(
+        "Three intensity levels — **signal** (µ≈0.5), **decoy** (ν≈0.1), **vacuum** (0) — "
+        "let Alice and Bob bound the single-photon gain fraction via the LMC formula, "
+        "making a Photon-Number-Splitting attack detectable and provably ineffective."
+    )
+
+    with st.expander("Run Decoy-State Simulation", expanded=True):
+        dc1, dc2, dc3 = st.columns(3)
+        with dc1:
+            ds_pulses   = st.slider("Total Pulses", 10000, 200000, 50000, step=10000, key="ds_pulses")
+            ds_distance = st.slider("Distance (km)", 1.0, 150.0, 20.0, step=1.0, key="ds_dist")
+            ds_det_eff  = st.slider("Detector Efficiency", 0.5, 1.0, 0.85, step=0.05, key="ds_det")
+        with dc2:
+            ds_mu_s = st.slider("Signal µ (mean photon number)", 0.1, 1.0, 0.5, step=0.05, key="ds_mus")
+            ds_mu_d = st.slider("Decoy ν (mean photon number)", 0.01, 0.49, 0.1, step=0.01, key="ds_mud")
+            ds_frac_s = st.slider("Signal pulse fraction", 0.3, 0.7, 0.5, step=0.05, key="ds_fracs")
+        with dc3:
+            ds_dark  = st.number_input("Dark Count Rate (Hz)", min_value=0.0, value=100.0, step=10.0, key="ds_dark")
+            ds_pns   = st.checkbox("Simulate PNS Attack", key="ds_pns")
+            ds_run   = st.button("Run Decoy-State Simulation", type="primary", key="ds_run")
+
+        if ds_mu_s <= ds_mu_d:
+            st.warning("Signal µ must be greater than decoy ν.")
+
+        elif ds_run:
+            ds_channel = QuantumChannel(
+                distance_km=ds_distance,
+                detector_efficiency=ds_det_eff,
+                dark_count_rate=ds_dark,
+                attack=AttackType.PHOTON_NUMBER_SPLITTING if ds_pns else AttackType.NONE,
+            )
+            ds_config = DecoyStateConfig(
+                mu_signal=ds_mu_s,
+                mu_decoy=ds_mu_d,
+                fraction_signal=ds_frac_s,
+                fraction_decoy=min(0.25, (1.0 - ds_frac_s) / 2),
+            )
+
+            with st.spinner("Running three-intensity decoy-state simulation..."):
+                ds_sim    = BB84Simulator()
+                ds_result = ds_sim.run_with_decoy_state(
+                    n_pulses=ds_pulses,
+                    channel=ds_channel,
+                    config=ds_config,
+                )
+
+            # --- Metrics row ---
+            m1, m2, m3, m4, m5 = st.columns(5)
+            with m1:
+                st.metric("Secure Key Bits (GLLP)", f"{ds_result.n_secure_key_bits:,}")
+            with m2:
+                st.metric("GLLP Key Rate", f"{ds_result.secure_key_rate_gllp:.1f} bps")
+            with m3:
+                st.metric("Standard Rate", f"{ds_result.secure_key_rate_standard:.1f} bps")
+            with m4:
+                st.metric("Improvement", f"{ds_result.key_rate_improvement_x:.2f}×")
+            with m5:
+                sp_pct = ds_result.single_photon_fraction * 100
+                st.metric("Single-Photon Fraction", f"{sp_pct:.1f}%")
+
+            # --- PNS detection banner ---
+            if ds_pns:
+                if ds_result.pns_detectable_via_decoy:
+                    st.error(
+                        f"PNS Attack DETECTED — cross-intensity gain inconsistency "
+                        f"{ds_result.pns_inconsistency*100:.1f}% (threshold 15%). "
+                        f"GLLP bound still guarantees secure key of {ds_result.n_secure_key_bits:,} bits."
+                    )
+                else:
+                    st.warning(
+                        f"PNS attack active but gain inconsistency "
+                        f"({ds_result.pns_inconsistency*100:.1f}%) below detection threshold — "
+                        f"GLLP bound still accounts for worst-case Eve information."
+                    )
+            else:
+                st.success(
+                    f"No attack. GLLP key rate {ds_result.secure_key_rate_gllp:.1f} bps — "
+                    f"{ds_result.key_rate_improvement_x:.2f}× tighter than standard BB84 bound."
+                )
+
+            # --- Chart: per-intensity gain comparison ---
+            gain_df = pd.DataFrame({
+                "Intensity": ["Signal (µ={:.2f})".format(ds_mu_s),
+                              "Decoy (ν={:.2f})".format(ds_mu_d),
+                              "Vacuum (0)"],
+                "Gain Q":    [ds_result.gain_signal, ds_result.gain_decoy, ds_result.gain_vacuum],
+                "QBER":      [ds_result.qber_signal, ds_result.qber_decoy, 0.5],
+            })
+
+            fig_gain = go.Figure()
+            fig_gain.add_trace(go.Bar(
+                x=gain_df["Intensity"], y=gain_df["Gain Q"],
+                name="Gain Q", marker_color="#0f62ac",
+            ))
+            fig_gain.add_trace(go.Bar(
+                x=gain_df["Intensity"], y=gain_df["QBER"],
+                name="QBER", marker_color="#ff6644",
+            ))
+            fig_gain.update_layout(
+                title="Per-Intensity Gain and QBER",
+                barmode="group",
+                plot_bgcolor="#0a1628", paper_bgcolor="#0a1628",
+                font=dict(color="white"),
+                yaxis_title="Value",
+            )
+            st.plotly_chart(fig_gain, width="stretch")
+
+            # --- Chart: GLLP vs Standard key rate comparison ---
+            rate_df = pd.DataFrame({
+                "Method":   ["Standard BB84\n(no decoy)", "Decoy-State GLLP"],
+                "Key Rate": [ds_result.secure_key_rate_standard, ds_result.secure_key_rate_gllp],
+                "Color":    ["#ff6644", "#00cc88"],
+            })
+            fig_rate = go.Figure(go.Bar(
+                x=rate_df["Method"], y=rate_df["Key Rate"],
+                marker_color=rate_df["Color"],
+                text=[f"{v:.1f} bps" for v in rate_df["Key Rate"]],
+                textposition="outside",
+            ))
+            fig_rate.update_layout(
+                title="Secure Key Rate: Standard BB84 vs Decoy-State GLLP",
+                yaxis_title="Key Rate (bps)",
+                plot_bgcolor="#0a1628", paper_bgcolor="#0a1628",
+                font=dict(color="white"),
+            )
+            st.plotly_chart(fig_rate, width="stretch")
+
+            # --- LMC parameter table ---
+            st.subheader("LMC Decoy-State Estimates")
+            lmc_df = pd.DataFrame([
+                {"Parameter": "Y₀ (dark count yield)", "Value": f"{ds_result.gain_vacuum:.2e}"},
+                {"Parameter": "τ₁ lower bound (Q1_lower)", "Value": f"{ds_result.Q1_lower_bound:.4e}"},
+                {"Parameter": "e₁ upper bound", "Value": f"{ds_result.e1_upper_bound*100:.3f}%"},
+                {"Parameter": "Single-photon fraction", "Value": f"{ds_result.single_photon_fraction*100:.2f}%"},
+                {"Parameter": "Multi-photon prob (signal)", "Value": f"{ds_result.simulation_stats['multi_photon_prob_signal']*100:.3f}%"},
+                {"Parameter": "Multi-photon prob (decoy)", "Value": f"{ds_result.simulation_stats['multi_photon_prob_decoy']*100:.3f}%"},
+                {"Parameter": "PNS gain inconsistency", "Value": f"{ds_result.pns_inconsistency*100:.2f}%"},
+            ])
+            st.dataframe(lmc_df, use_container_width=True, hide_index=True)
+
 
 
 # ================================================================== #

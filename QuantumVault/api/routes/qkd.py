@@ -3,14 +3,18 @@
 from fastapi import APIRouter, HTTPException
 from api.models.schemas import (
     BB84Request, BB84Response, E91Request, E91Response,
-    MDIQKDRequest, ChannelAnalysisRequest, DistanceSweepRequest, AttackSweepRequest
+    MDIQKDRequest, ChannelAnalysisRequest, DistanceSweepRequest, AttackSweepRequest,
+    DecoyStateRequest, DecoyStateResponse,
 )
+
 from core.qkd import (
     BB84Simulator, QuantumChannel, AttackType,
+    DecoyStateConfig, DecoyStateResult,
     E91Simulator,
     MDIQKDSimulator,
     QKDChannelAnalyzer, ChannelMedium, HARDWARE_PROFILES
 )
+
 
 router = APIRouter(prefix="/api/v1/qkd", tags=["QKD Protocols"])
 
@@ -53,6 +57,7 @@ def simulate_bb84(req: BB84Request):
             attack_type=result.attack_type.value,
             error_correction_bits_leaked=result.error_correction_bits_leaked,
             privacy_amplification_compression=result.privacy_amplification_compression,
+            finite_key_correction_bits=result.finite_key_correction_bits,
             simulation_stats=result.simulation_stats,
         )
     except Exception as e:
@@ -173,6 +178,80 @@ def sweep_attack(req: AttackSweepRequest):
         return sim.sweep_attack(req.intercept_fractions)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+@router.post("/bb84/decoy-state", response_model=DecoyStateResponse,
+             summary="BB84 with Three-Intensity Decoy-State Protocol (GLLP)")
+def simulate_decoy_state(req: DecoyStateRequest):
+    """
+    Simulate BB84 with the three-intensity decoy-state protocol.
+
+    Sends pulses at signal (µ), decoy (ν), and vacuum intensities.
+    Applies the Lo-Ma-Chen (LMC) lower bound on single-photon gain to compute
+    a provably secure GLLP key rate — valid even under a full PNS attack.
+
+    When pns_attack=true, Eve blocks all single-photon signal pulses.
+    The cross-intensity gain inconsistency is then measurable and reported.
+    """
+    try:
+        if req.mu_signal <= req.mu_decoy:
+            raise HTTPException(
+                status_code=422,
+                detail="mu_signal must be strictly greater than mu_decoy"
+            )
+        if req.fraction_signal + req.fraction_decoy >= 1.0:
+            raise HTTPException(
+                status_code=422,
+                detail="fraction_signal + fraction_decoy must be less than 1.0"
+            )
+
+        channel = QuantumChannel(
+            distance_km=req.distance_km,
+            detector_efficiency=req.detector_efficiency,
+            dark_count_rate=req.dark_count_rate,
+            attack=AttackType.PHOTON_NUMBER_SPLITTING if req.pns_attack else AttackType.NONE,
+        )
+        config = DecoyStateConfig(
+            mu_signal=req.mu_signal,
+            mu_decoy=req.mu_decoy,
+            fraction_signal=req.fraction_signal,
+            fraction_decoy=req.fraction_decoy,
+        )
+
+        sim = BB84Simulator()
+        result = sim.run_with_decoy_state(
+            n_pulses=req.n_pulses,
+            channel=channel,
+            config=config,
+        )
+
+        return DecoyStateResponse(
+            n_pulses_total=result.n_pulses_total,
+            n_signal_pulses=result.n_signal_pulses,
+            n_decoy_pulses=result.n_decoy_pulses,
+            n_vacuum_pulses=result.n_vacuum_pulses,
+            gain_signal=result.gain_signal,
+            gain_decoy=result.gain_decoy,
+            gain_vacuum=result.gain_vacuum,
+            qber_signal=result.qber_signal,
+            qber_decoy=result.qber_decoy,
+            Q1_lower_bound=result.Q1_lower_bound,
+            e1_upper_bound=result.e1_upper_bound,
+            single_photon_fraction=result.single_photon_fraction,
+            n_secure_key_bits=result.n_secure_key_bits,
+            secure_key_rate_gllp=result.secure_key_rate_gllp,
+            secure_key_rate_standard=result.secure_key_rate_standard,
+            key_rate_improvement_x=result.key_rate_improvement_x,
+            pns_attack_active=result.pns_attack_active,
+            pns_detectable_via_decoy=result.pns_detectable_via_decoy,
+            pns_inconsistency=result.pns_inconsistency,
+            finite_key_correction_bits=result.finite_key_correction_bits,
+            simulation_stats=result.simulation_stats,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
 @router.get("/hardware/profiles", summary="List Available QKD Hardware Profiles")
