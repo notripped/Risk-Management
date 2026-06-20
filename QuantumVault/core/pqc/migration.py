@@ -12,7 +12,7 @@ Covers:
 - TLS 1.3 migration profiles
 - SWIFT, FIX protocol, FpML compatibility analysis
 - Timeline and effort estimation
-- DORA and CNSA 2.0 compliance mapping
+- DORA, CNSA 2.0, NIS2 Article 21, BIS Project Leap, and WEF Quantum Security Roadmap compliance mapping
 """
 
 from dataclasses import dataclass, field
@@ -218,7 +218,22 @@ class MigrationEngine:
             "CNSA_2.0":          counts[MigrationUrgency.CRITICAL] == 0,
             "DORA_quantum_risk": counts[MigrationUrgency.CRITICAL] + counts[MigrationUrgency.HIGH] < len(assets) // 4,
             "NSA_CNSSP_15":      all(a.asset.algorithm != ClassicalAlgorithm.RSA_1024 for a in assessments),
+            "NIS2_Article21":    not any(
+                                     a.urgency in (MigrationUrgency.CRITICAL, MigrationUrgency.HIGH)
+                                     and a.asset.data_sensitivity in ("confidential", "secret")
+                                     for a in assessments
+                                 ),
+            "BIS_Project_Leap":  not any(
+                                     ALGORITHM_VULNERABILITY.get(a.asset.algorithm, {}).get("quantum_broken", False)
+                                     and a.asset.protocol in {
+                                         FinancialProtocol.SWIFT, FinancialProtocol.ISO_20022,
+                                         FinancialProtocol.FIX_4_4, FinancialProtocol.FIX_5_0,
+                                     }
+                                     for a in assessments
+                                 ),
+            "WEF_Quantum_Roadmap": counts[MigrationUrgency.CRITICAL] == 0 and avg_risk < 50,
         }
+
 
         exec_summary = (
             f"{institution_name} has {len(assets)} cryptographic assets assessed. "
@@ -291,14 +306,51 @@ class MigrationEngine:
 
     def _check_compliance(self, asset: CryptoAsset, urgency: MigrationUrgency) -> list:
         flags = []
+        vuln = ALGORITHM_VULNERABILITY.get(asset.algorithm, {})
+        quantum_broken = vuln.get("quantum_broken", False)
+
+        # CNSA 2.0 / NIST SP 800-131A
         if urgency == MigrationUrgency.CRITICAL:
             flags.append("NON-COMPLIANT: CNSA 2.0 requires PQC for national security systems")
         if asset.algorithm in [ClassicalAlgorithm.RSA_1024]:
             flags.append("NON-COMPLIANT: RSA-1024 deprecated by NIST SP 800-131A")
+
+        # NIS2 Directive — Article 21 cryptographic controls
+        if quantum_broken and asset.data_sensitivity in ("confidential", "secret"):
+            flags.append(
+                "NON-COMPLIANT: NIS2 Article 21 — quantum-vulnerable algorithm protecting "
+                f"{asset.data_sensitivity} data breaches mandatory cryptographic control requirements"
+            )
+        elif urgency in (MigrationUrgency.HIGH, MigrationUrgency.MEDIUM) and asset.data_sensitivity in ("confidential", "secret"):
+            flags.append(
+                "WARNING: NIS2 Article 21 — plan PQC migration to maintain adequate "
+                "cryptographic controls under NIS2 obligations"
+            )
+
+        # BIS Project Leap — quantum-safe cross-border finance infrastructure
+        _financial_protocols = {
+            FinancialProtocol.SWIFT, FinancialProtocol.ISO_20022,
+            FinancialProtocol.FIX_4_4, FinancialProtocol.FIX_5_0,
+        }
+        if quantum_broken and asset.protocol in _financial_protocols:
+            flags.append(
+                f"NON-COMPLIANT: BIS Project Leap — {asset.protocol.value} uses a quantum-vulnerable "
+                "algorithm; cross-border payment infrastructure must migrate to PQC"
+            )
+
+        # WEF Quantum Security Roadmap (2024) — board-level readiness tracking
+        if quantum_broken and asset.retention_years > self.QDAY_MEDIAN:
+            flags.append(
+                f"RISK: WEF Quantum Security Roadmap — {asset.retention_years}-year retention exceeds "
+                f"median Q-Day estimate ({self.QDAY_MEDIAN} years); HNDL exposure requires board-level escalation"
+            )
+
+        # Generic HNDL and TLS warnings
         if asset.retention_years > 10 and urgency != MigrationUrgency.NONE:
             flags.append("RISK: HNDL threat — data could be decrypted before retention period ends")
         if asset.protocol == FinancialProtocol.TLS_1_2:
             flags.append("WARNING: TLS 1.2 does not support hybrid PQC — upgrade to TLS 1.3")
+
         if not flags:
             flags.append("COMPLIANT: No immediate compliance issues")
         return flags
